@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>腦波連接【找出關聯的默契遊戲】</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAYhH3ZHDPqnA9ZDqCxA8n7zYjv-iKvc00",
+      authDomain: "brainwave-party.firebaseapp.com",
+      projectId: "brainwave-party",
+      storageBucket: "brainwave-party.firebasestorage.app",
+      messagingSenderId: "384093160240",
+      appId: "1:384093160240:web:2a0716b322ebb3aad97ef5",
+      measurementId: "G-CSSNFTRXZG"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    window.db = getFirestore(app);
+    window.fsDoc = doc;
+    window.fsGetDoc = getDoc;
+    window.fsSetDoc = setDoc;
+    window.fsOnSnapshot = onSnapshot;
+    window.fsUpdateDoc = updateDoc;
+    window.dispatchEvent(new Event("firebase-ready"));
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+    body { font-family: 'Noto Sans TC', sans-serif; overflow: hidden; user-select: none; }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+    .animate-shake { animation: shake 0.4s ease-in-out; }
+    @keyframes float-up { 0% { opacity: 0; transform: translateY(15px) scale(0.8); } 30% { opacity: 1; transform: translateY(-5px) scale(1.15); } 80% { opacity: 1; transform: translateY(-15px) scale(1); } 100% { opacity: 0; transform: translateY(-25px) scale(0.9); } }
+    .animate-score-float { animation: float-up 2.5s ease-out forwards; }
+    @keyframes miracle-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 25px rgba(250, 204, 21, 0.9), 0 0 50px rgba(234, 179, 8, 0.5); } 50% { transform: scale(1.1); box-shadow: 0 0 45px rgba(250, 204, 21, 1), 0 0 80px rgba(234, 179, 8, 0.9); } }
+    .animate-miracle { animation: miracle-pulse 1.2s infinite ease-in-out; }
+    @keyframes rank-up-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px) scale(1.05); } }
+    .animate-rank-up { animation: rank-up-bounce 0.8s ease-in-out 3; }
+    @keyframes x2-banner { 0% { opacity: 0; transform: scale(0.5); } 15% { opacity: 1; transform: scale(1.08); } 25% { opacity: 1; transform: scale(1); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.3); } }
+    .animate-x2-overlay { animation: x2-banner 2.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white h-screen w-screen overflow-hidden">
+  <div id="root" class="h-full w-full"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const PLAYER_COLORS = [
+      { bg: "#7C3AED", border: "#A78BFA", text: "#FFFFFF" },
+      { bg: "#10B981", border: "#6EE7B7", text: "#FFFFFF" },
+      { bg: "#2563EB", border: "#93C5FD", text: "#FFFFFF" },
+      { bg: "#F97316", border: "#FDBA74", text: "#FFFFFF" },
+      { bg: "#EAB308", border: "#FEF08A", text: "#0F172A" },
+      { bg: "#4F46E5", border: "#A5B4FC", text: "#FFFFFF" },
+      { bg: "#EF4444", border: "#FCA5A5", text: "#FFFFFF" },
+      { bg: "#78350F", border: "#D97706", text: "#FFFFFF" },
+      { bg: "#FBCFE8", border: "#F472B6", text: "#1E293B" },
+      { bg: "#14532D", border: "#4ADE80", text: "#FFFFFF" },
+      { bg: "#18181B", border: "#71717A", text: "#FFFFFF" },
+      { bg: "#EC4899", border: "#F9A8D4", text: "#FFFFFF" }
+    ];
+
+    function getGridClass(count) {
+      if (count <= 2) return "grid-cols-2 grid-rows-1 gap-4 text-3xl";
+      if (count === 3) return "grid-cols-3 grid-rows-1 gap-4 text-2xl";
+      if (count === 4) return "grid-cols-2 grid-rows-2 gap-4 text-2xl";
+      if (count <= 6) return "grid-cols-3 grid-rows-2 gap-3 text-xl";
+      if (count <= 8) return "grid-cols-4 grid-rows-2 gap-3 text-lg";
+      if (count <= 10) return "grid-cols-5 grid-rows-2 gap-2.5 text-base";
+      return "grid-cols-4 grid-rows-3 gap-2 text-base";
+    }
+
+    const playTone = (type) => {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        const now = ctx.currentTime;
+        if (type === "error") {
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(160, now);
+          osc.frequency.linearRampToValueAtTime(90, now + 0.25);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+          osc.start(now); osc.stop(now + 0.25);
+        } else if (type === "submit") {
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+          osc.start(now); osc.stop(now + 0.15);
+        } else if (type === "miracle") {
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = "triangle";
+            o.connect(g); g.connect(ctx.destination);
+            o.frequency.setValueAtTime(freq, now + i * 0.08);
+            g.gain.setValueAtTime(0.2, now + i * 0.08);
+            g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.6);
+            o.start(now + i * 0.08); o.stop(now + i * 0.08 + 0.6);
+          });
+        }
+      } catch (e) {}
+    };
+
+    // 呼叫自己的 Vercel Serverless API (/api/gemini)
+    async function computeBrainwaveAI(prevWordsRaw, forbiddenWordsRaw) {
+      const prevWords = (prevWordsRaw || []).map(w => typeof w === "string" ? w.trim() : (w?.word || "").trim()).filter(Boolean);
+      const forbiddenWords = (forbiddenWordsRaw || []).map(w => typeof w === "string" ? w.trim() : (w?.word || "").trim()).filter(Boolean);
+
+      try {
+        const res = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prevWords, forbiddenWords })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.bestWord && !forbiddenWords.includes(data.bestWord.trim())) {
+            return {
+              bestWord: data.bestWord.trim(),
+              synonyms: Array.isArray(data.synonyms) ? data.synonyms : [],
+              highRel: Array.isArray(data.highRel) ? data.highRel : [],
+              midRel: Array.isArray(data.midRel) ? data.midRel : []
+            };
+          }
+        }
+      } catch (err) {
+        console.warn("API Server error, falling back:", err);
+      }
+
+      // 備用安全 Fallback
+      return { bestWord: "天使", synonyms: ["神明", "守護"], highRel: ["天堂", "嬰兒"], midRel: ["翅膀"] };
+    }
+
+    function scorePlayerWord(word, aiBundle, allSubmittedWords) {
+      const clean = (word || "").trim();
+      if (!clean || clean === "（未發射）") return 0;
+      const best = (aiBundle?.bestWord || "").trim();
+      if (clean === best) return 13;
+      if (aiBundle?.synonyms?.some(s => s === clean || (clean.length >= 2 && (best.includes(clean) || clean.includes(best))))) {
+        return 10;
+      }
+      if (aiBundle?.highRel?.some(r => r === clean || r.includes(clean) || clean.includes(r))) return 5;
+      if (aiBundle?.midRel?.some(r => r === clean || r.includes(clean) || clean.includes(r))) return 4;
+      const sameWithOthers = allSubmittedWords.filter(w => w === clean).length;
+      if (sameWithOthers >= 2) return 5;
+      const hash = clean.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+      return (hash % 3) + 1;
+    }
+
+    function BrainwaveApp() {
+      const [fbReady, setFbReady] = useState(!!window.db);
+      const [nickname, setNickname] = useState("");
+      const [roomInput, setRoomInput] = useState("");
+      const [hostPwd, setHostPwd] = useState("");
+      const [selectedRounds, setSelectedRounds] = useState(10);
+      const [roomData, setRoomData] = useState(null);
+      const [myId, setMyId] = useState(() => sessionStorage.getItem("bw_uid") || "");
+      const [inputWord, setInputWord] = useState("");
+      const [shakeInput, setShakeInput] = useState(false);
+      const [scorePage, setScorePage] = useState(0);
+      const [timeLeft, setTimeLeft] = useState(60);
+      const [showX2Banner, setShowX2Banner] = useState(false);
+      const [rankUpIds, setRankUpIds] = useState([]);
+      const prevRanksRef = useRef({});
+      const precomputedAIRef = useRef(null);
+      const lockTransitionRef = useRef(false);
+
+      useEffect(() => {
+        const onReady = () => setFbReady(true);
+        window.addEventListener("firebase-ready", onReady);
+        return () => window.removeEventListener("firebase-ready", onReady);
+      }, []);
+
+      useEffect(() => {
+        if (!roomData?.roomId || !window.db) return;
+        const unsub = window.fsOnSnapshot(window.fsDoc(window.db, "rooms", roomData.roomId), (snap) => {
+          if (snap.exists()) setRoomData(snap.data());
+        });
+        return () => unsub();
+      }, [roomData?.roomId]);
+
+      const isHost = roomData?.players?.[0]?.id === myId;
+      const me = roomData?.players?.find(p => p.id === myId);
+
+      useEffect(() => {
+        if (!roomData?.players) return;
+        const sorted = [...roomData.players].sort((a, b) => b.score - a.score);
+        const newRanks = {};
+        const promoted = [];
+        sorted.forEach((p, idx) => {
+          newRanks[p.id] = idx;
+          if (prevRanksRef.current[p.id] !== undefined && idx < prevRanksRef.current[p.id]) {
+            promoted.push(p.id);
+          }
+        });
+        prevRanksRef.current = newRanks;
+        if (promoted.length > 0) {
+          setRankUpIds(promoted);
+          setTimeout(() => setRankUpIds([]), 2600);
+        }
+      }, [roomData?.round]);
+
+      useEffect(() => {
+        if (roomData?.phase === "STAGE_2" && roomData?.round % 5 === 0) {
+          setShowX2Banner(true);
+          const t = setTimeout(() => setShowX2Banner(false), 2800);
+          return () => clearTimeout(t);
+        }
+      }, [roomData?.round, roomData?.phase]);
+
+      useEffect(() => {
+        if (!isHost || !roomData) return;
+        if (roomData.phase === "STAGE_2") {
+          precomputedAIRef.current = null;
+          const prevWordStrings = (roomData.displayWords || []).map(d => d.word);
+          computeBrainwaveAI(prevWordStrings, roomData.forbiddenWords || []).then(res => {
+            precomputedAIRef.current = res;
+          });
+        }
+      }, [isHost, roomData?.phase, roomData?.round]);
+
+      useEffect(() => {
+        setInputWord("");
+        lockTransitionRef.current = false;
+      }, [roomData?.phase, roomData?.round]);
+
+      useEffect(() => {
+        if (!roomData?.phaseDeadline || roomData.phase === "LOBBY" || roomData.phase === "FINISHED") return;
+        const timer = setInterval(() => {
+          const remain = Math.max(0, Math.ceil((roomData.phaseDeadline - Date.now()) / 1000));
+          setTimeLeft(remain);
+          if (remain <= 0 && isHost && !lockTransitionRef.current) {
+            handleHostPhaseTimeout();
+          }
+        }, 250);
+        return () => clearInterval(timer);
+      }, [roomData?.phaseDeadline, roomData?.phase, isHost]);
+
+      useEffect(() => {
+        if (!isHost || !roomData || lockTransitionRef.current) return;
+        if (roomData.phase === "STAGE_1" || roomData.phase === "STAGE_2") {
+          const allSubmitted = roomData.players.length >= 2 && roomData.players.every(p => p.submitted);
+          if (allSubmitted) handleHostPhaseTimeout();
+        }
+      }, [roomData?.players, isHost, roomData?.phase]);
+
+      const handleHostPhaseTimeout = async () => {
+        if (lockTransitionRef.current || !roomData) return;
+        lockTransitionRef.current = true;
+        const docRef = window.fsDoc(window.db, "rooms", roomData.roomId);
+
+        if (roomData.phase === "STAGE_1") {
+          const wordsOnBoard = roomData.players.map((p, i) => ({
+            id: p.id,
+            name: p.name,
+            colorIdx: p.colorIdx,
+            word: p.currentWord.trim() || ["台灣味", "珍奶", "雞排", "夜市", "加班", "迷因", "發大財", "火鍋", "颱風假", "超商", "機車", "過年"][i % 12]
+          }));
+          const forbidden = wordsOnBoard.map(w => w.word);
+          const resetPlayers = roomData.players.map(p => ({ ...p, currentWord: "", submitted: false, lastGain: 0 }));
+
+          await window.fsUpdateDoc(docRef, {
+            phase: "STAGE_2",
+            displayWords: wordsOnBoard,
+            forbiddenWords: forbidden,
+            players: resetPlayers,
+            phaseDeadline: Date.now() + 60000
+          });
+        } else if (roomData.phase === "STAGE_2") {
+          const prevBoardStrings = (roomData.displayWords || []).map(d => d.word);
+          let aiBundle = precomputedAIRef.current;
+          if (!aiBundle) {
+            aiBundle = await computeBrainwaveAI(prevBoardStrings, roomData.forbiddenWords || []);
+          }
+
+          const isDouble = roomData.round % 5 === 0;
+          const multiplier = isDouble ? 2 : 1;
+          const allWords = roomData.players.map(p => p.currentWord.trim()).filter(Boolean);
+
+          const scoredPlayers = roomData.players.map(p => {
+            const w = p.currentWord.trim();
+            const rawPts = scorePlayerWord(w, aiBundle, allWords);
+            const finalGain = rawPts * multiplier;
+            return {
+              ...p,
+              rawScore: rawPts,
+              lastGain: finalGain,
+              score: p.score + finalGain
+            };
+          });
+
+          await window.fsUpdateDoc(docRef, {
+            phase: "STAGE_3",
+            aiResult: aiBundle,
+            players: scoredPlayers,
+            phaseDeadline: Date.now() + 10000
+          });
+        } else if (roomData.phase === "STAGE_3") {
+          if (roomData.round >= roomData.totalRounds) {
+            await window.fsUpdateDoc(docRef, { phase: "FINISHED" });
+          } else {
+            const nextDisplayWords = roomData.players.map((p) => ({
+              id: p.id,
+              name: p.name,
+              colorIdx: p.colorIdx,
+              word: p.currentWord.trim() || "（未發射）"
+            }));
+            const nextForbidden = [
+              ...nextDisplayWords.map(d => d.word).filter(w => w !== "（未發射）"),
+              roomData.aiResult?.bestWord
+            ].filter(Boolean);
+
+            const resetPlayers = roomData.players.map(p => ({
+              ...p,
+              currentWord: "",
+              submitted: false,
+              lastGain: 0,
+              rawScore: 0
+            }));
+
+            await window.fsUpdateDoc(docRef, {
+              round: roomData.round + 1,
+              phase: "STAGE_2",
+              displayWords: nextDisplayWords,
+              forbiddenWords: nextForbidden,
+              players: resetPlayers,
+              phaseDeadline: Date.now() + 60000
+            });
+          }
+        }
+      };
+
+      const handleCreateRoom = async () => {
+        if (!nickname.trim()) return alert("請先輸入暱稱！");
+        if (hostPwd !== "00001234") return alert("密碼錯誤！");
+
+        const rId = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const uid = "u_" + Date.now() + "_" + Math.random().toString(36).substring(2, 5);
+        sessionStorage.setItem("bw_uid", uid);
+        setMyId(uid);
+
+        const initialRoom = {
+          roomId: rId,
+          totalRounds: selectedRounds,
+          round: 1,
+          phase: "LOBBY",
+          players: [{
+            id: uid,
+            name: nickname.trim(),
+            colorIdx: 0,
+            score: 0,
+            currentWord: "",
+            submitted: false,
+            lastGain: 0,
+            rawScore: 0
+          }],
+          displayWords: [],
+          forbiddenWords: [],
+          aiResult: null,
+          phaseDeadline: 0
+        };
+
+        await window.fsSetDoc(window.fsDoc(window.db, "rooms", rId), initialRoom);
+        setRoomData(initialRoom);
+      };
+
+      const handleJoinRoom = async () => {
+        if (!nickname.trim()) return alert("請先輸入暱稱！");
+        const code = roomInput.trim().toUpperCase();
+        if (!code) return alert("請輸入房間號碼！");
+
+        const docRef = window.fsDoc(window.db, "rooms", code);
+        const snap = await window.fsGetDoc(docRef);
+        if (!snap.exists()) return alert("找不到此腦波房間號碼！");
+
+        const data = snap.data();
+        if (data.phase !== "LOBBY") return alert("該房間已經開始腦波同步，無法中途加入！");
+        if (data.players.length >= 12) return alert("房間人數已滿（上限 12 人）！");
+
+        let uid = myId;
+        if (!uid || !data.players.some(p => p.id === uid)) {
+          uid = "u_" + Date.now() + "_" + Math.random().toString(36).substring(2, 5);
+          sessionStorage.setItem("bw_uid", uid);
+          setMyId(uid);
+        }
+
+        if (data.players.some(p => p.id === uid)) {
+          setRoomData(data);
+          return;
+        }
+
+        const nextColorIdx = data.players.length % 12;
+        const newPlayer = {
+          id: uid,
+          name: nickname.trim(),
+          colorIdx: nextColorIdx,
+          score: 0,
+          currentWord: "",
+          submitted: false,
+          lastGain: 0,
+          rawScore: 0
+        };
+
+        const updatedPlayers = [...data.players, newPlayer];
+        await window.fsUpdateDoc(docRef, { players: updatedPlayers });
+        setRoomData({ ...data, players: updatedPlayers });
+      };
+
+      const handleStartGame = async () => {
+        if (roomData.players.length < 2) return alert("至少需要 2 位真人玩家才能啟動腦波連接！");
+        await window.fsUpdateDoc(window.fsDoc(window.db, "rooms", roomData.roomId), {
+          phase: "STAGE_1",
+          round: 1,
+          phaseDeadline: Date.now() + 60000
+        });
+      };
+
+      const handleSubmitWord = async (e) => {
+        if (e) e.preventDefault();
+        const clean = inputWord.trim();
+        if (!clean || me?.submitted) return;
+
+        if (roomData.phase === "STAGE_2" && (roomData.forbiddenWords || []).includes(clean)) {
+          playTone("error");
+          setShakeInput(true);
+          setTimeout(() => setShakeInput(false), 450);
+          return;
+        }
+
+        playTone("submit");
+        const updated = roomData.players.map(p =>
+          p.id === myId ? { ...p, currentWord: clean, submitted: true } : p
+        );
+        await window.fsUpdateDoc(window.fsDoc(window.db, "rooms", roomData.roomId), { players: updated });
+      };
+
+      useEffect(() => {
+        if (roomData?.phase === "STAGE_3") {
+          const hasExactMatch = roomData.players.some(p => p.rawScore === 13);
+          if (hasExactMatch) playTone("miracle");
+          else playTone("submit");
+        }
+      }, [roomData?.phase]);
+
+      if (!fbReady) {
+        return <div className="h-full flex items-center justify-center text-slate-400">腦波頻率核心啟動中……</div>;
+      }
+
+      if (!roomData) {
+        const hasName = nickname.trim().length > 0;
+        return (
+          <div className="h-full w-full flex flex-col items-center justify-center px-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+            <div className="text-center mb-6">
+              <h1 className="text-5xl font-black tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 drop-shadow-lg">
+                腦波連接
+              </h1>
+              <p className="text-slate-400 text-sm mt-2 font-medium tracking-widest">
+                【找出關聯的默契遊戲】
+              </p>
+            </div>
+
+            <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+              <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-400 mb-2 tracking-wider">
+                  STEP 1. 輸入你的腦波代號（暱稱）
+                </label>
+                <input
+                  type="text"
+                  maxLength={8}
+                  value={nickname}
+                  onChange={e => setNickname(e.target.value)}
+                  placeholder="請先取好暱稱以解鎖房間功能…"
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-2xl text-white font-bold focus:outline-none focus:border-violet-500 transition"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`p-4 rounded-2xl border transition ${hasName ? "bg-slate-950/60 border-violet-500/40" : "bg-slate-950/30 border-slate-800 opacity-50 pointer-events-none"}`}>
+                  <div className="text-sm font-black text-violet-400 mb-3">創立房間</div>
+                  <input
+                    type="password"
+                    value={hostPwd}
+                    onChange={e => setHostPwd(e.target.value)}
+                    placeholder="密碼(6碼)"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm mb-3 focus:outline-none focus:border-violet-500"
+                  />
+                  <div className="text-xs text-slate-400 mb-1.5">選擇總回合數：</div>
+                  <div className="grid grid-cols-5 gap-1 mb-4">
+                    {[5, 10, 15, 20, 25].map(r => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setSelectedRounds(r)}
+                        className={`py-1.5 rounded-lg text-xs font-bold transition ${selectedRounds === r ? "bg-violet-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={handleCreateRoom}
+                    disabled={!hasName}
+                    className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-xl shadow-lg transition active:scale-95"
+                  >
+                    創立房間
+                  </button>
+                </div>
+
+                <div className={`p-4 rounded-2xl border flex flex-col justify-between transition ${hasName ? "bg-slate-950/60 border-emerald-500/40" : "bg-slate-950/30 border-slate-800 opacity-50 pointer-events-none"}`}>
+                  <div>
+                    <div className="text-sm font-black text-emerald-400 mb-3">加入房間</div>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={roomInput}
+                      onChange={e => setRoomInput(e.target.value)}
+                      placeholder="輸入 6 碼房間號碼"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm uppercase font-mono tracking-widest mb-3 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleJoinRoom}
+                    disabled={!hasName}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition active:scale-95"
+                  >
+                    加入房間
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const otherPlayersSorted = [...roomData.players]
+        .filter(p => p.id !== myId)
+        .sort((a, b) => b.score - a.score);
+      const totalOtherPages = Math.max(1, Math.ceil(otherPlayersSorted.length / 3));
+      const safePage = Math.min(scorePage, totalOtherPages - 1);
+      const threeOthers = otherPlayersSorted.slice(safePage * 3, safePage * 3 + 3);
+      const topBarPlayers = [me, ...threeOthers].filter(Boolean);
+
+      const isDoubleRound = roomData.round % 5 === 0;
+      const exactMatchers = roomData.phase === "STAGE_3"
+        ? roomData.players.filter(p => p.rawScore === 13)
+        : [];
+
+      return (
+        <div className="h-full w-full flex flex-col justify-between p-3 md:p-5 max-w-6xl mx-auto relative overflow-hidden">
+          
+          {showX2Banner && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none bg-black/50 backdrop-blur-sm animate-x2-overlay">
+              <div className="px-10 py-6 rounded-3xl bg-gradient-to-r from-amber-500 via-yellow-400 to-orange-500 text-slate-950 shadow-[0_0_80px_rgba(250,204,21,0.9)] text-center border-4 border-white">
+                <div className="text-sm font-black tracking-widest uppercase">BRAINWAVE OVERDRIVE</div>
+                <div className="text-4xl md:text-5xl font-black mt-1">⚡ 腦波增幅回合！得分 ×2 ⚡</div>
+              </div>
+            </div>
+          )}
+
+          <div className="shrink-0 mb-3">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5 px-1">
+              <div className="flex items-center gap-3">
+                <span className="font-black text-white tracking-wider">《腦波連接》</span>
+                <span>房號：<strong className="text-violet-400 font-mono select-all">{roomData.roomId}</strong></span>
+                {roomData.phase !== "LOBBY" && (
+                  <span className={`px-2 py-0.5 rounded-full font-bold ${isDoubleRound ? "bg-amber-500 text-slate-950 animate-pulse" : "bg-slate-800 text-slate-300"}`}>
+                    第 {roomData.round} / {roomData.totalRounds} 回合 {isDoubleRound && "(得分×2)"}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                {roomData.phase !== "LOBBY" && roomData.phase !== "FINISHED" && (
+                  <div className={`font-mono font-black text-sm px-2.5 py-0.5 rounded-lg ${timeLeft <= 10 ? "bg-red-600 text-white animate-bounce" : "bg-slate-800 text-cyan-400"}`}>
+                    ⏱ {timeLeft}s
+                  </div>
+                )}
+                {roomData.players.length > 4 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setScorePage(p => Math.max(0, p - 1))}
+                      disabled={safePage === 0}
+                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded text-xs font-bold"
+                    >
+                      ◀
+                    </button>
+                    <span className="text-[11px]">{safePage + 1}/{totalOtherPages}</span>
+                    <button
+                      onClick={() => setScorePage(p => Math.min(totalOtherPages - 1, p + 1))}
+                      disabled={safePage >= totalOtherPages - 1}
+                      className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded text-xs font-bold"
+                    >
+                      ▶
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 md:gap-3">
+              {topBarPlayers.map((p, idx) => {
+                const c = PLAYER_COLORS[p.colorIdx % 12];
+                const isPromoted = rankUpIds.includes(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                    className={`rounded-2xl px-3 py-2 border-2 shadow-lg flex items-center justify-between relative overflow-visible transition-transform ${isPromoted ? "animate-rank-up ring-4 ring-yellow-300" : ""}`}
+                  >
+                    <div className="flex items-center gap-1.5 truncate pr-2">
+                      <span className="text-xs md:text-sm font-black truncate">
+                        {idx === 0 ? `★ ${p.name}` : p.name}
+                      </span>
+                      {isPromoted && (
+                        <span className="text-[10px] px-1 bg-yellow-300 text-slate-950 font-black rounded animate-pulse">
+                          ▲UP
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-base md:text-xl font-black font-mono shrink-0">
+                      {p.score}
+                    </div>
+
+                    {roomData.phase === "STAGE_3" && p.lastGain > 0 && (
+                      <div className="absolute -bottom-3 right-2 z-30 px-2 py-0.5 rounded-full bg-yellow-300 text-slate-950 font-black text-xs shadow-md animate-score-float">
+                        +{p.lastGain}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {roomData.phase === "LOBBY" && (
+            <div className="flex-1 flex flex-col items-center justify-center bg-slate-900/60 border border-slate-800 rounded-3xl p-6 my-1">
+              <div className="text-xs font-bold text-violet-400 tracking-widest mb-1">ROOM CODE</div>
+              <div className="text-5xl font-mono font-black tracking-widest text-white mb-2 select-all">
+                {roomData.roomId}
+              </div>
+              <p className="text-xs text-slate-400 mb-6">
+                將上方 6 碼房間號分享給朋友即可加入（目前已連接 {roomData.players.length} / 12 人）
+              </p>
+
+              <div className={`w-full max-w-4xl grid ${getGridClass(roomData.players.length)} flex-1 max-h-80 mb-6`}>
+                {roomData.players.map((p, idx) => {
+                  const c = PLAYER_COLORS[p.colorIdx % 12];
+                  return (
+                    <div
+                      key={p.id}
+                      style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                      className="rounded-2xl border-2 p-3 flex flex-col items-center justify-center shadow-lg font-black relative"
+                    >
+                      <span className="text-lg md:text-2xl truncate max-w-full">{p.name}</span>
+                      {idx === 0 && <span className="text-[10px] opacity-80 mt-1">（房主）</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {isHost ? (
+                <button
+                  onClick={handleStartGame}
+                  className="px-10 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-black rounded-2xl shadow-xl text-lg transition active:scale-95"
+                >
+                  開始腦波同步（共 {roomData.totalRounds} 回合）
+                </button>
+              ) : (
+                <div className="text-sm text-slate-400 font-bold animate-pulse">
+                  等待房主啟動腦波同步程序……
+                </div>
+              )}
+            </div>
+          )}
+
+          {roomData.phase === "STAGE_1" && (
+            <div className="flex-1 flex flex-col justify-between overflow-hidden">
+              <div className={`flex-1 grid ${getGridClass(roomData.players.length)} my-1 overflow-hidden`}>
+                {roomData.players.map(p => {
+                  const c = PLAYER_COLORS[p.colorIdx % 12];
+                  return (
+                    <div
+                      key={p.id}
+                      style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                      className="rounded-2xl border-2 p-3 flex flex-col justify-between shadow-lg relative overflow-hidden"
+                    >
+                      <div className="text-xs font-bold opacity-85 truncate">{p.name}</div>
+                      <div className="flex-1 flex items-center justify-center font-black tracking-wide text-center">
+                        {p.submitted ? "⚡ 腦波已鎖定" : "發想初始詞語中…"}
+                      </div>
+                      <div className="h-2"></div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <form onSubmit={handleSubmitWord} className="shrink-0 mt-3 bg-slate-900 border border-slate-800 rounded-2xl p-3 flex gap-3 items-center">
+                <input
+                  type="text"
+                  maxLength={12}
+                  value={inputWord}
+                  onChange={e => setInputWord(e.target.value)}
+                  disabled={me?.submitted}
+                  placeholder={me?.submitted ? "已鎖定初始腦波，等待全體同步…" : "【第 1 回合】請任意輸入一個你現在想到的詞語…"}
+                  className="flex-1 px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold focus:outline-none focus:border-violet-500"
+                />
+                <button
+                  type="submit"
+                  disabled={me?.submitted || !inputWord.trim()}
+                  className={`px-7 py-3 rounded-xl font-black transition ${me?.submitted ? "bg-slate-800 text-slate-500" : "bg-violet-600 hover:bg-violet-500 text-white shadow-lg active:scale-95"}`}
+                >
+                  {me?.submitted ? "已發射" : "發射腦波"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {roomData.phase === "STAGE_2" && (
+            <div className="flex-1 flex flex-col justify-between overflow-hidden">
+              <div className={`flex-1 grid ${getGridClass((roomData.displayWords || []).length)} my-1 overflow-hidden`}>
+                {(roomData.displayWords || []).map(item => {
+                  const c = PLAYER_COLORS[item.colorIdx % 12];
+                  const playerState = roomData.players.find(p => p.id === item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                      className="rounded-2xl border-2 p-3 flex flex-col justify-between shadow-lg relative overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between text-xs font-bold opacity-85">
+                        <span className="truncate">{item.name}</span>
+                        {playerState?.submitted && (
+                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-black/30 text-white font-black">
+                            已發射
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 flex items-center justify-center font-black tracking-wider text-center break-all px-1">
+                        {item.word}
+                      </div>
+                      <div className="h-2"></div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <form onSubmit={handleSubmitWord} className={`shrink-0 mt-3 bg-slate-900 border border-slate-800 rounded-2xl p-3 flex gap-3 items-center ${shakeInput ? "animate-shake border-red-500" : ""}`}>
+                <input
+                  type="text"
+                  maxLength={12}
+                  value={inputWord}
+                  onChange={e => setInputWord(e.target.value)}
+                  disabled={me?.submitted}
+                  placeholder={me?.submitted ? "已發射關聯腦波，等待全體玩家同步…" : "輸入你認為與上方所有詞語最契合的「關聯詞」…"}
+                  className="flex-1 px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold focus:outline-none focus:border-violet-500"
+                />
+                <button
+                  type="submit"
+                  disabled={me?.submitted || !inputWord.trim()}
+                  className={`px-7 py-3 rounded-xl font-black transition ${me?.submitted ? "bg-slate-800 text-slate-500" : "bg-violet-600 hover:bg-violet-500 text-white shadow-lg active:scale-95"}`}
+                >
+                  {me?.submitted ? "已發射" : "發射腦波"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {roomData.phase === "STAGE_3" && (
+            <div className="flex-1 flex flex-col items-center justify-center relative bg-slate-900/70 border border-slate-800 rounded-3xl p-4 my-1 overflow-hidden">
+              
+              {exactMatchers.length > 0 && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 px-6 py-1.5 rounded-full bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-500 text-slate-950 font-black text-xs md:text-sm shadow-[0_0_30px_rgba(250,204,21,0.9)] animate-bounce">
+                  {exactMatchers.length >= 2
+                    ? `🌟 多重腦波奇蹟共鳴！${exactMatchers.map(p => p.name).join("、")} 同時完全命中 AI 核心詞！ 🌟`
+                    : `✨ 腦波完全同步！${exactMatchers[0].name} 完全命中 AI 最佳關聯詞！ ✨`}
+                </div>
+              )}
+
+              <div className="relative w-full h-full flex items-center justify-center">
+                <div className={`z-20 px-7 py-5 rounded-full bg-gradient-to-br from-violet-600 via-fuchsia-600 to-indigo-700 border-4 border-white text-center shadow-[0_0_50px_rgba(168,85,247,0.8)] ${exactMatchers.length > 0 ? "animate-miracle border-yellow-300" : ""}`}>
+                  <div className="text-[10px] font-bold tracking-widest text-violet-200 uppercase">AI 最佳關聯詞</div>
+                  <div className="text-2xl md:text-4xl font-black text-white mt-0.5">
+                    {roomData.aiResult?.bestWord || "運算中"}
+                  </div>
+                </div>
+
+                {roomData.players.map((p, idx) => {
+                  const total = roomData.players.length;
+                  const angle = (idx / total) * 2 * Math.PI - Math.PI / 2;
+                  const raw = p.rawScore || 0;
+                  const radiusPct = raw === 13 ? 21 : raw === 10 ? 29 : raw >= 4 ? 37 : 44;
+                  const x = 50 + Math.cos(angle) * radiusPct;
+                  const y = 50 + Math.sin(angle) * radiusPct;
+                  const c = PLAYER_COLORS[p.colorIdx % 12];
+                  const isExact = raw === 13;
+
+                  return (
+                    <React.Fragment key={p.id}>
+                      <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+                        <line
+                          x1="50%"
+                          y1="50%"
+                          x2={`${x}%`}
+                          y2={`${y}%`}
+                          stroke={isExact ? "#FACC15" : c.bg}
+                          strokeWidth={isExact ? "4" : "2"}
+                          strokeDasharray={isExact ? "none" : "5,5"}
+                          opacity={isExact ? "1" : "0.6"}
+                        />
+                      </svg>
+
+                      <div
+                        style={{
+                          left: `${x}%`,
+                          top: `${y}%`,
+                          backgroundColor: c.bg,
+                          color: c.text,
+                          borderColor: isExact ? "#FEF08A" : c.border
+                        }}
+                        className={`-translate-x-1/2 -translate-y-1/2 absolute z-20 px-3.5 py-2 rounded-2xl border-2 shadow-xl text-center min-w-[100px] transition-all duration-700 ${isExact ? "animate-miracle ring-4 ring-yellow-300 scale-110" : ""}`}
+                      >
+                        <div className="text-[10px] font-bold opacity-85 truncate max-w-[90px] mx-auto">
+                          {p.name}
+                        </div>
+                        <div className="text-sm md:text-base font-black truncate max-w-[110px] mx-auto">
+                          {p.currentWord || "（未發射）"}
+                        </div>
+                        <div className="text-[11px] font-black mt-0.5 px-1.5 py-0.2 rounded-full bg-black/25 inline-block">
+                          +{p.lastGain} 分 {isExact && "👑"}
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+
+              <div className="shrink-0 text-xs text-slate-400 font-bold mt-2">
+                {timeLeft} 秒後自動以本輪全體詞語進入下一回合……
+              </div>
+            </div>
+          )}
+
+          {roomData.phase === "FINISHED" && (
+            <div className="flex-1 flex flex-col items-center justify-between bg-slate-900/80 border border-slate-800 rounded-3xl p-6 my-1 overflow-y-auto">
+              <div className="text-center">
+                <div className="text-xs font-black text-amber-400 tracking-widest">BRAINWAVE SYNCHRONIZATION COMPLETE</div>
+                <h2 className="text-3xl font-black mt-1">腦波連接總結算</h2>
+              </div>
+
+              <div className="flex items-end justify-center gap-4 my-4 w-full max-w-lg">
+                {[1, 0, 2].map(rankIdx => {
+                  const sorted = [...roomData.players].sort((a, b) => b.score - a.score);
+                  const p = sorted[rankIdx];
+                  if (!p) return null;
+                  const c = PLAYER_COLORS[p.colorIdx % 12];
+                  const heights = ["h-40", "h-32", "h-28"];
+                  const medals = ["🥇 冠軍", "🥈 亞軍", "🥉 季軍"];
+                  return (
+                    <div key={p.id} className="flex-1 flex flex-col items-center">
+                      <div className="text-xs font-black mb-1 text-amber-300">{medals[rankIdx]}</div>
+                      <div
+                        style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+                        className={`w-full ${heights[rankIdx]} rounded-2xl border-2 p-3 flex flex-col items-center justify-center shadow-2xl`}
+                      >
+                        <div className="font-black text-base md:text-lg truncate max-w-full">{p.name}</div>
+                        <div className="text-xl md:text-2xl font-mono font-black mt-1">{p.score} 分</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="w-full max-w-2xl grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+                {[...roomData.players].sort((a, b) => b.score - a.score).map((p, i) => {
+                  const c = PLAYER_COLORS[p.colorIdx % 12];
+                  return (
+                    <div
+                      key={p.id}
+                      style={{ backgroundColor: c.bg, color: c.text }}
+                      className="rounded-xl px-3 py-2 flex items-center justify-between font-bold text-sm shadow"
+                    >
+                      <span className="truncate">#{i + 1} {p.name}</span>
+                      <span className="font-mono font-black">{p.score} 分</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {isHost && (
+                <button
+                  onClick={handleStartGame}
+                  className="px-8 py-3 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-2xl shadow-xl transition"
+                >
+                  原房再來一局
+                </button>
+              )}
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<BrainwaveApp />);
+  </script>
+</body>
+</html>
